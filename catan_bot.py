@@ -1,3 +1,9 @@
+
+# coding: utf-8
+
+# In[1]:
+
+
 import numpy as np
 from catan import Catan, CatanException, get_random_dice_arrangement, Player, Game, simulate_1p_game, simulate_1p_game_with_data
 import matplotlib.pyplot as plt
@@ -5,21 +11,34 @@ from itertools import repeat
 import sys
 import copy
 
+
+# In[2]:
+
+
 def action(self):
-    # print("__________________________________________")        
-    # print("NEW ACTION!")
+    print("__________________________________________")        
+    print("NEW ACTION!")
     starting_resources = copy.deepcopy(self.resources)
     more_actions = True
+    
+    print(self.points)
+    
+    if self.points == 0 and self.if_can_buy("settlement"):
+        (x,y) = self.preComp
+        if not self.board.if_can_build("settlement", x, y):
+            board_scores = make_board_scores(None, self.board)
+            settlement_scores = make_settlement_scores(self.board, board_scores)
+            new_vertex = np.argmax(np.delete(settlement_scores, self.board.get_vertex_number(x,y)))
+            (x,y) = self.board.get_vertex_location(new_vertex)
+            
+        loc = (x, y)
+        self.buy("settlement", x, y) # we determined previously    
+        print("bought first settlement at " + str(loc))   
+    
     while more_actions:
         starting_resources = copy.deepcopy(self.resources)        
         (goal, loc) = determine_goal(self)
-        # print(goal)
-
-        if self.get_settlements() == [] and self.if_can_buy("settlement"):
-            (x,y) = self.preComp
-            loc = (x, y)
-            self.buy("settlement", x, y) # we determined previously    
-            print("bought settlement at " + str(loc))         
+        print(goal)      
 
         if goal == "settlement":
             (x, y) = loc
@@ -33,10 +52,9 @@ def action(self):
                     print("bought road " + str(v0) + str(v1))
             else:
                 modified_trade(self, goal)
-
         elif goal == "city":
             if self.if_can_buy("city"):
-                (x, y) = loc                
+                (x, y) = loc
                 self.buy("city", x, y)            
                 print("bought city at " + str(loc))              
             else:
@@ -48,21 +66,33 @@ def action(self):
             else:
                 modified_trade(self, goal)
 
-        if self.resources[0] < 0 or self.resources[1] < 0 or self.resources[2] < 0:
-            print("NEGATIVE RESOURCES??")
-        
-#         print(starting_resources)        
-#         print(self.resources)
         if np.array_equal(starting_resources, self.resources):
             more_actions = False
             
     return
 
 
+# In[4]:
+
+
 def dumpPolicy(self, max_resources):
     print("DUMPED")
     new_resources = np.minimum(self.resources, max_resources // 3)
     return self.resources - new_resources
+
+
+# In[5]:
+
+
+def planBoard(baseBoard):
+    board_scores = make_board_scores(None, baseBoard)
+    settlement_scores = make_settlement_scores(baseBoard, board_scores)
+    vertex = np.argmax(settlement_scores)
+    return baseBoard.get_vertex_location(vertex)
+
+
+# In[3]:
+
 
 def determine_goal(self):
     costs = np.array([[2, 1, 1],
@@ -75,7 +105,7 @@ def determine_goal(self):
     
 #     buildings = [("settlement", costs[0]+num_roads*costs[3]), ("city", costs[1]), ("card", costs[2])]
     buildings = [("settlement", costs[0]+costs[3]), ("city", costs[1]), ("card", costs[2])]
-    goal = "card"
+    goal = "settlement"
     max_value = 0
     for building in buildings:
         if building[0] == "city" and self.get_settlements() == []:
@@ -96,10 +126,9 @@ def determine_goal(self):
     
     return (goal, loc)
 
-def planBoard(baseBoard):
-    board_scores = make_board_scores(None, baseBoard)
-    settlement_scores = make_settlement_scores(baseBoard, board_scores)
-    return baseBoard.get_vertex_location(np.argmax(settlement_scores))
+
+# In[6]:
+
 
 def optimal_settlement(self):
 
@@ -122,27 +151,27 @@ def optimal_settlement(self):
                     max_score = score
     return opt_set_loc
 
-def get_closest(self, goal):
-    curr_settlements = self.get_settlements()
-    curr_roads = self.get_roads()    
-    closest = 0
-    closest_dist = 500
-    for s in curr_settlements:
-        coordinates = self.board.get_vertex_location(s)
-        dist = abs(goal[0] - coordinates[0]) + abs(goal[1] - coordinates[1])
-        if dist < closest_dist:
-            closest = s
-            closest_dist = dist
-    
-    for r in curr_roads:
-        for end in r:
-            r_end = self.board.get_vertex_location(end)
-            dist = abs(goal[0] - r_end[0]) + abs(goal[1] - r_end[1])
-            if dist < closest_dist:
-                closest = end
-                closest_dist = dist
-    
-    return (closest, closest_dist)
+
+# In[9]:
+
+
+def optimal_city(self):
+
+    board_scores = make_board_scores(self, self.board)
+    settlement_scores = make_settlement_scores(self.board, board_scores)
+    opt_s = self.preComp
+    val = 0
+    for settlement in self.get_settlements():
+        s = self.board.get_vertex_location(settlement)
+        score = settlement_scores[s[1]][s[0]]
+        if score > val:
+            val = score
+            opt_s = s
+    return opt_s
+
+
+# In[8]:
+
 
 def optimal_road(self, goal):
     curr_settlements = self.get_settlements()
@@ -166,19 +195,35 @@ def optimal_road(self, goal):
     
     return (self.board.get_vertex_location(closest), self.board.get_vertex_location(v2))
 
-def optimal_city(self):
 
-    board_scores = make_board_scores(self, self.board)
-    settlement_scores = make_settlement_scores(self.board, board_scores)
-    opt_s = self.preComp
-    val = 0
-    for settlement in self.get_settlements():
-        s = self.board.get_vertex_location(settlement)
-        score = settlement_scores[s[1]][s[0]]
-        if score > val:
-            val = score
-            opt_s = s
-    return opt_s
+# In[7]:
+
+
+def get_closest(self, goal):
+    curr_settlements = self.get_settlements()
+    curr_roads = self.get_roads()    
+    closest = 0
+    closest_dist = 500
+    for s in curr_settlements:
+        coordinates = self.board.get_vertex_location(s)
+        dist = abs(goal[0] - coordinates[0]) + abs(goal[1] - coordinates[1])
+        if dist < closest_dist:
+            closest = s
+            closest_dist = dist
+    
+    for r in curr_roads:
+        for end in r:
+            r_end = self.board.get_vertex_location(end)
+            dist = abs(goal[0] - r_end[0]) + abs(goal[1] - r_end[1])
+            if dist < closest_dist:
+                closest = end
+                closest_dist = dist
+    
+    return (closest, closest_dist)
+
+
+# In[10]:
+
 
 def modified_trade(self, goal):
     ports = [] #get list of ports and everything thats in it    
@@ -233,7 +278,11 @@ def modified_trade(self, goal):
         print("TRADED")
     elif max(self.resources) > 5 and min(self.resources) == 0:
         self.trade(np.argmax(self.resources), np.argmin(self.resources))
-        print("TRADED")        
+        print("TRADED")
+
+
+# In[11]:
+
 
 def hitting_time(self, start, goal):
     # print("------------------------------------------------------------")
@@ -317,10 +366,7 @@ def hitting_time(self, start, goal):
         
         # poss_nxt_state[0] = the state we will be in if we roll a 2
         # poss_nxt_state[10] = state we will be in if we roll a 12
-        poss_nxt_states = [flatten_state((current[0] + delta[0], \
-                                         current[1] + delta[1], \
-                                         current[2] + delta[2]), goal) \
-                           for delta in self.board.get_resources(self.player_id)]
+        poss_nxt_states = [flatten_state((current[0] + delta[0],                                          current[1] + delta[1],                                          current[2] + delta[2]), goal)                            for delta in self.board.get_resources(self.player_id)]
 
         # print(current, poss_nxt_states)
 
@@ -371,6 +417,10 @@ def hitting_time(self, start, goal):
     
     return x[0] # return the hitting time from the start state
 
+
+# In[12]:
+
+
 RESOURCE_SCORES = {0: 4, 1: 7, 2: 6, -1: 0}  ## MAKE SURE THESE ARE RIGHT. SHOULD BE WOOD BRICK GRAIN
 RESOURCE_WEIGHT = 3 # FOR TESTING
 SCARCITY_WEIGHT = 2  # Larger means prioritizing getting scarce resources more
@@ -401,8 +451,7 @@ def make_board_scores(self, board):
 # Calculate the score of tile i, j on the board
 def calculate_tile_score(self, board, res_num, i, j):
     # Calculates using resource inherent score, scarcity of resource, and how many resources player already has of it
-    resource_score = RESOURCE_SCORES[board.resources[i][j]] + \
-                    (len(board.dice)*len(board.dice[0]) / res_num.get(board.resources[i][j])) * SCARCITY_WEIGHT
+    resource_score = RESOURCE_SCORES[board.resources[i][j]] +                     (len(board.dice)*len(board.dice[0]) / res_num.get(board.resources[i][j])) * SCARCITY_WEIGHT
     if self:
         resource_score += 1/self.resources[board.resources[i][j]] * PLAYER_RESOURCE_WEIGHT
 
@@ -442,4 +491,4 @@ def get_settlement_score(board, board_scores, i, j):
     elif i == len(board_scores) and j == len(board_scores[0]):
         return board_scores[i-1][j-1] + PORT_WEIGHT
     else:
-        return board_scores[i][j] + board_scores[i][j-1] + board_scores[i-1][j] + board_scores[i-1][j-1]    
+        return board_scores[i][j] + board_scores[i][j-1] + board_scores[i-1][j] + board_scores[i-1][j-1]

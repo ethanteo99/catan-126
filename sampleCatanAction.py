@@ -20,3 +20,7 @@ def planBoard(baseBoard):
 
 def genRand(low,high):
     return np.random.randint(low, high)
+
+def dumpPolicy(self, max_resources):
+    new_resources = np.minimum(self.resources, max_resources // 3)
+    return self.resources - new_resources    
